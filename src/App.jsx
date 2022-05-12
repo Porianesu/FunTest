@@ -4,7 +4,6 @@ import ImageDemo from "./ImageDemo";
 import { Test } from "./myFunc";
 const T = Test;
 const t = new Test();
-debugger;
 function ThreeJs() {
   return (
     <>
