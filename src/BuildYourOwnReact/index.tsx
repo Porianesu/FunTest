@@ -56,8 +56,28 @@ const createDom: (fiber: DidacticFiber) => Node = (fiber) => {
     });
   return dom;
 };
-const updateDom = (dom, prevProps, nextProps) => {
-
+const isEvent = (key: string) => key.startsWith("on");
+const isProperty = (key: string) => key !== "children" && !isEvent(key);
+const isNew =
+  (prev: { [x: string]: any }, next: { [x: string]: any }) => (key: string) =>
+    prev[key] !== next[key];
+const isGone = (prev: any, next: any) => (key: string) => !(key in next);
+const updateDom = (
+  dom: ParentNode,
+  prevProps: ParentNode,
+  nextProps: ParentNode
+) => {
+  // 移除旧的活着已经改变了的监听事件
+  // 移除旧属性
+  Object.keys(prevProps)
+    .filter(isProperty)
+    .filter(isGone(prevProps, nextProps))
+    .forEach((name) => (dom[name] = ""));
+  // 设置新属性
+  Object.keys(prevProps)
+    .filter(isProperty)
+    .filter(isNew(prevProps, nextProps))
+    .forEach((name) => (dom[name] = nextProps[name]));
 };
 const commitRoot = () => {
   deletions?.forEach(commitWork);
