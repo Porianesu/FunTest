@@ -68,6 +68,13 @@ const updateDom = (
   nextProps: ParentNode
 ) => {
   // 移除旧的活着已经改变了的监听事件
+  Object.keys(prevProps)
+    .filter(isEvent)
+    .filter((key) => !(key in nextProps) || isNew(prevProps, nextProps)(key))
+    .forEach((name) => {
+      const eventType = name.toLowerCase().substring(2);
+      dom.removeEventListener(eventType, prevProps[name]);
+    });
   // 移除旧属性
   Object.keys(prevProps)
     .filter(isProperty)
