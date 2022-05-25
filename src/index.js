@@ -2,16 +2,11 @@ import React from "react";
 import ReactDOM from "react-dom";
 import "./index.css";
 import App from "./App";
+import BuildYourOwnReactApp from "./BuildYourOwnReact/BuildYourOwnReactApp";
 import reportWebVitals from "./reportWebVitals";
 /** @tsxRuntime classic */
 import Didactic from "./BuildYourOwnReact/Didactic";
-/** @tsx Didactic.createElement */
-const element = (
-  <div>
-    <a>123</a>
-    <br />
-  </div>
-);
+const element = <BuildYourOwnReactApp name={"good 123"} />;
 const container = document.getElementById("root");
 Didactic.render(element, container);
 // ReactDOM.render(

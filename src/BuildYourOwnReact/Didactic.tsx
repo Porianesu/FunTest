@@ -1,31 +1,24 @@
 type IsNullAble<T> = T | null | undefined;
 type EffectTag = "UPDATE" | "PLACEMENT" | "DELETION";
-type HTMLElementTagMap = HTMLElementTagNameMap[keyof HTMLElementTagNameMap];
-interface DidacticNormalFiber {
-  type: keyof HTMLElementTagNameMap;
-  dom: HTMLElement | null;
-  parent: IsNullAble<DidacticFiber>;
-  child: IsNullAble<DidacticFiber>;
-  sibling: IsNullAble<DidacticFiber>;
-  props: {
-    [Property in keyof HTMLElement]: HTMLElement[Property];
-  };
+type DidacticAction<T> = (state: T) => T;
+type DidacticUseState = <T>(
+  initial: T
+) => [T, (action: T | DidacticAction<T>) => void];
+interface DidacticHook {
+  state: any;
+  queue: Array<DidacticAction<any>>;
+}
+interface DidacticFiber {
+  type?: string | Function;
+  dom: IsNullAble<HTMLElement | Text>;
+  parent?: IsNullAble<DidacticFiber>;
+  child?: IsNullAble<DidacticFiber>;
+  sibling?: IsNullAble<DidacticFiber>;
+  props: any;
   alternate: IsNullAble<DidacticFiber>;
   effectTag?: EffectTag;
+  hooks?: Array<DidacticHook>;
 }
-interface DidacticTextFiber {
-  type: "TEXT_ELEMENT";
-  dom: HTMLElement | null;
-  parent: IsNullAble<DidacticFiber>;
-  child: IsNullAble<DidacticFiber>;
-  sibling: IsNullAble<DidacticFiber>;
-  props: {
-    nodeValue: string;
-  };
-  alternate: IsNullAble<DidacticFiber>;
-  effectTag?: EffectTag;
-}
-type DidacticFiber = DidacticNormalFiber | DidacticTextFiber;
 const createTextElement: (text: string) => DidacticFiber = (text) => {
   return {
     type: "TEXT_ELEMENT",
@@ -60,18 +53,26 @@ const createElement: (
     },
   };
 };
-const createDom: (fiber: DidacticFiber) => Node = (fiber) => {
+const createDom: (fiber: DidacticFiber) => HTMLElement | Text = (fiber) => {
+  let dom: Text | HTMLElement;
   if (fiber.type === "TEXT_ELEMENT") {
-    return document.createTextNode(fiber.props.nodeValue);
+    dom = document.createTextNode(fiber.props.nodeValue);
   } else {
-    const dom = document.createElement(fiber.type);
-    (Object.keys(fiber.props) as Array<keyof HTMLElementTagMap>)
+    dom = document.createElement(fiber.type as string);
+    Object.keys(fiber.props)
       .filter(isProperty)
-      .forEach((name) => {
+      .forEach((name: string) => {
         dom[name] = fiber.props[name];
       });
-    return dom;
   }
+  // 添加监听事件
+  Object.keys(fiber.props)
+    .filter(isEvent)
+    .forEach((name) => {
+      const eventType = name.toLowerCase().substring(2);
+      dom.addEventListener(eventType, fiber.props[name]);
+    });
+  return dom;
 };
 const isEvent = (key: string) => key.startsWith("on");
 const isProperty = (key: any) => key !== "children" && !isEvent(key);
@@ -115,21 +116,39 @@ const commitRoot = () => {
 };
 const commitWork: (fiber: IsNullAble<DidacticFiber>) => void = (fiber) => {
   if (!fiber) return;
-  const domParent = fiber.parent?.dom;
+  // 为了适配函数式组件，改为从dom树向上寻找指导有一个dom节点作为domParent
+  let domParentFiber = fiber.parent;
+  while (!domParentFiber?.dom) {
+    domParentFiber = domParentFiber?.parent;
+  }
+  const domParent = domParentFiber.dom;
   if (fiber.dom) {
     if (fiber.effectTag === "PLACEMENT") {
       domParent?.appendChild(fiber.dom);
     } else if (fiber.effectTag === "UPDATE") {
       updateDom(fiber.dom, fiber.alternate?.props, fiber.props);
     } else if (fiber.effectTag === "DELETION") {
-      domParent?.removeChild(fiber.dom);
+      commitDeletion(fiber, domParent);
     }
   }
   commitWork(fiber.child);
   commitWork(fiber.sibling);
 };
+const commitDeletion: (
+  fiber: DidacticFiber,
+  domParent: HTMLElement | Text
+) => void = (fiber, domParent) => {
+  if (fiber.dom) {
+    domParent.removeChild(fiber.dom);
+  } else {
+    if (fiber.child) {
+      commitDeletion(fiber.child, domParent);
+    }
+  }
+};
 const render = (element: DidacticFiber, container: HTMLElement) => {
   wipRoot = nextUnitOfWork = {
+    type: container.nodeName.toLowerCase(),
     dom: container,
     props: {
       children: [element],
@@ -149,14 +168,11 @@ let deletions: IsNullAble<Array<DidacticFiber>> = null;
 const performUnitOfWork: (fiber: DidacticFiber) => IsNullAble<DidacticFiber> = (
   fiber
 ) => {
-  //add dom node
-  if (!fiber.dom) {
-    fiber.dom = createDom(fiber);
-  }
-  //create new fibers
-  if (fiber.type !== "TEXT_ELEMENT") {
-    const elements = (fiber as DidacticNormalFiber).props.children;
-    reconcileChildren(fiber, elements);
+  const isFunctionComponent = fiber.type instanceof Function;
+  if (isFunctionComponent) {
+    updateFunctionComponent(fiber);
+  } else {
+    updateHostComponent(fiber);
   }
   if (fiber.child) {
     return fiber.child;
@@ -174,6 +190,54 @@ const performUnitOfWork: (fiber: DidacticFiber) => IsNullAble<DidacticFiber> = (
     }
   }
 };
+let wipFiber: DidacticFiber;
+let hookIndex: number;
+const updateFunctionComponent: (fiber: DidacticFiber) => void = (fiber) => {
+  wipFiber = fiber;
+  hookIndex = 0;
+  wipFiber.hooks = [];
+  const children = [(fiber.type as Function)(fiber.props)];
+  reconcileChildren(fiber, children);
+};
+const useState: DidacticUseState = (initial) => {
+  const oldHook = wipFiber?.alternate?.hooks?.[hookIndex];
+  const hook: DidacticHook = {
+    state: oldHook ? oldHook.state : initial,
+    queue: [],
+  };
+  const actions = oldHook?.queue || [];
+  actions.forEach((action) => {
+    hook.state = action(hook.state);
+  });
+  wipFiber.hooks?.push(hook);
+  hookIndex++;
+  const setState = (
+    action: typeof initial | DidacticAction<typeof initial>
+  ) => {
+    const finalAction = action instanceof Function ? action : () => action;
+    hook.queue.push(finalAction);
+    // workInProgressRoot
+    wipRoot = {
+      dom: currentRoot?.dom,
+      props: currentRoot?.props,
+      alternate: currentRoot,
+    };
+    nextUnitOfWork = wipRoot;
+    deletions = [];
+  };
+  return [hook.state, setState];
+};
+const updateHostComponent: (fiber: DidacticFiber) => void = (fiber) => {
+  //add dom node
+  if (!fiber.dom) {
+    fiber.dom = createDom(fiber);
+  }
+  //create new fibers
+  if (fiber.type !== "TEXT_ELEMENT") {
+    const elements = fiber.props.children;
+    reconcileChildren(fiber, elements);
+  }
+};
 const reconcileChildren = (
   wipFiber: DidacticFiber,
   elements: string | any[]
@@ -182,17 +246,24 @@ const reconcileChildren = (
   let oldFiber = wipFiber.alternate && wipFiber.alternate.child;
   let prevSibling = null;
   if (elements) {
-    // 非文本节点
-    if (Array.isArray(elements)) {
-      while (index < elements.length || oldFiber !== null) {
-        const element = elements[index];
-        let newFiber: IsNullAble<DidacticFiber> = null;
-        // 比较旧fiber和element
-        const sameType = oldFiber && elements && element.type === oldFiber.type;
-        if (sameType) {
-          // 更新节点
+    while (index < elements.length || oldFiber) {
+      const element = elements[index];
+      const elementType = Object.prototype.toString.call(element);
+      let newFiber: IsNullAble<DidacticFiber> = null;
+      // 比较旧fiber和element
+      let sameType = false;
+      if (oldFiber && element) {
+        if (elementType === "[object Object]") {
+          sameType = oldFiber.type === element.type;
+        } else {
+          sameType = oldFiber.type === "TEXT_ELEMENT";
+        }
+      }
+      if (sameType) {
+        // 更新节点
+        if (elementType === "[object Object]") {
           newFiber = {
-            type: oldFiber?.type,
+            type: element.type,
             props: element.props,
             dom: oldFiber?.dom || null,
             parent: wipFiber,
@@ -201,9 +272,24 @@ const reconcileChildren = (
             alternate: oldFiber,
             effectTag: "UPDATE",
           };
+        } else {
+          newFiber = {
+            type: "TEXT_ELEMENT",
+            props: {
+              nodeValue: element,
+            },
+            dom: oldFiber?.dom || null,
+            parent: wipFiber,
+            child: null,
+            sibling: null,
+            alternate: oldFiber,
+            effectTag: "UPDATE",
+          };
         }
-        if (element && !sameType) {
-          // 添加到节点上
+      }
+      if (element && !sameType) {
+        // 添加到节点上
+        if (elementType === "[object Object]") {
           newFiber = {
             type: element.type,
             props: element.props,
@@ -214,34 +300,38 @@ const reconcileChildren = (
             alternate: null,
             effectTag: "PLACEMENT",
           };
+        } else {
+          newFiber = {
+            type: "TEXT_ELEMENT",
+            props: {
+              nodeValue: element,
+            },
+            dom: null,
+            parent: wipFiber,
+            child: null,
+            sibling: null,
+            alternate: null,
+            effectTag: "PLACEMENT",
+          };
         }
-        if (oldFiber && !sameType) {
-          // 删除旧节点
-          oldFiber.effectTag = "DELETION";
-          deletions?.push(oldFiber);
-        }
-        // 第一个元素变为父Fiber的child节点，然后赋给prevSibling，之后的每一个元素都赋给前一个元素的sibling
-        if (index === 0) {
-          wipFiber.child = newFiber;
-        } else if (element) {
-          if (prevSibling) {
-            prevSibling.sibling = newFiber;
-          }
-        }
-        prevSibling = newFiber;
-        index++;
       }
-    } else {
-      wipFiber.child = {
-        type: "TEXT_ELEMENT",
-        props: elements,
-        dom: null,
-        parent: wipFiber,
-        child: null,
-        sibling: null,
-        alternate: null,
-        effectTag: "PLACEMENT",
-      };
+      if (oldFiber && !sameType) {
+        debugger;
+        // 删除旧节点
+        oldFiber.effectTag = "DELETION";
+        deletions?.push(oldFiber);
+      }
+      // 第一个元素变为父Fiber的child节点，然后赋给prevSibling，之后的每一个元素都赋给前一个元素的sibling
+      if (index === 0) {
+        wipFiber.child = newFiber;
+      } else if (element) {
+        if (prevSibling) {
+          prevSibling.sibling = newFiber;
+        }
+      }
+      prevSibling = newFiber;
+      oldFiber = oldFiber?.sibling;
+      index++;
     }
   }
 };
@@ -258,6 +348,6 @@ const workLoop: IdleRequestCallback = (deadline) => {
   requestIdleCallback(workLoop);
 };
 requestIdleCallback(workLoop);
-const Didactic = { createElement, render };
+const Didactic = { createElement, render, useState };
 
 export default Didactic;
