@@ -3,13 +3,23 @@ import ReactDOM from "react-dom";
 import "./index.css";
 import App from "./App";
 import reportWebVitals from "./reportWebVitals";
-
-ReactDOM.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>,
-  document.getElementById("root")
+/** @tsxRuntime classic */
+import Didactic from "./BuildYourOwnReact/Didactic";
+/** @tsx Didactic.createElement */
+const element = (
+  <div>
+    <a>123</a>
+    <br />
+  </div>
 );
+const container = document.getElementById("root");
+Didactic.render(element, container);
+// ReactDOM.render(
+//   <React.StrictMode>
+//     <App />
+//   </React.StrictMode>,
+//   document.getElementById("root")
+// );
 
 // If you want to start measuring performance in your app, pass a function
 // to log results (for example: reportWebVitals(console.log))

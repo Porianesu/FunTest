@@ -28,7 +28,8 @@
     "test": "react-scripts test",
     "eject": "react-scripts eject",
     "esbuild": "esbuild src/App.jsx --bundle --outfile=out.js",
-    "nodeesbuild": "node esbuild.js"
+    "nodeesbuild": "node esbuild.js",
+    "eslint": "eslint src --fix"
   },
   "browserslist": {
     "production": [
