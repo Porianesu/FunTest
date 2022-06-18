@@ -316,7 +316,6 @@ const reconcileChildren = (
         }
       }
       if (oldFiber && !sameType) {
-        debugger;
         // 删除旧节点
         oldFiber.effectTag = "DELETION";
         deletions?.push(oldFiber);
