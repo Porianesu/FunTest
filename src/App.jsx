@@ -1,20 +1,28 @@
-import React, { useEffect } from "react";
-import MatterJsDemo from "./MatterJs";
-import ImageDemo from "./ImageDemo";
-import { Test } from "./myFunc";
-const T = Test;
-const t = new Test();
-function ThreeJs() {
+import React from "react";
+import { Link } from "react-router-dom";
+import { Outlet } from "react-router";
+function App() {
   return (
-    <>
-      <MatterJsDemo />
-      <ImageDemo />
-    </>
+    <div>
+      <h1>My Test</h1>
+      <nav
+        style={{
+          borderBottom: "solid 1px",
+          paddingBottom: "1rem",
+        }}
+      >
+        <Link to="/invoices">Invoices</Link> |{" "}
+        <Link to="/expenses">Expenses</Link> |{" "}
+        <Link to="/matterJsDemo">MatterJsDemo</Link> |{" "}
+        <Link to="/imageDemo">ImageDemo</Link>|{" "}
+        <Link to="/threeJsDemo">ThreeJsDemo</Link>
+      </nav>
+      <Outlet />
+    </div>
   );
-  // return <ThreeJsDemo/>
 }
 
-export default ThreeJs;
+export default App;
 // import * as React from "react";
 // import * as Server from "react-dom/server";
 //
