@@ -30,7 +30,7 @@ setTimeout(() => {
     console.log("timeout1_then");
   });
 }, 2000);
-function xhr() {
+async function xhr() {
   console.log("xhr");
   return "async";
 }
